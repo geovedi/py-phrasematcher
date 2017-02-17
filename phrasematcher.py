@@ -44,7 +44,7 @@ class PhraseMatcher(object):
             self.eos[arr_len].add(arr[-1])
             c_arr = self.checksum(arr)
             c_idx = (arr_len, arr[0], arr[-1])
-            self.checksums[c_idx].add(c_arr)
+            self.checksums[c_arr].add(c_idx)
             self.lengths.add(arr_len)
 
     def checksum(self, arr):
@@ -66,12 +66,15 @@ class PhraseMatcher(object):
                 j = i + p_len
                 if j + 1 <= tok_len:
                     e_int = tok_arr[j - 1]
-                    if UNK in set(tok_arr[i:j]):
+                    p_arr = tok_arr[i:j]
+                    if UNK in set(p_arr):
                         continue
                     if b_int in self.bos[p_len] and e_int in self.eos[p_len]:
                         c_idx = (p_len, b_int, e_int)
-                        candidates.add(((i, j), c_idx))
-                        ranges.add((i, j))
+                        c_arr = self.checksum(p_arr)
+                        if c_idx in self.checksums.get(p_arr, set()):
+                            candidates.add(((i, j), c_idx))
+                            ranges.add((i, j))
 
         if remove_subset:
             # filter out overlapping candidates
@@ -85,9 +88,4 @@ class PhraseMatcher(object):
 
         # check candidates
         for (i, j), c_idx in candidates:
-            checksums = self.checksums.get(c_idx)
-            if not checksums:
-                continue
-            c_arr = self.checksum(tok_arr[i:j])
-            if c_arr in checksums:
-                yield tok[i:j]
+            yield tok[i:j]
