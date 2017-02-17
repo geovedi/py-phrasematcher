@@ -5,7 +5,6 @@ from __future__ import unicode_literals
 import os
 import io
 import re
-import pickle
 import vedis
 import xxhash
 
