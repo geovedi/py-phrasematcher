@@ -8,10 +8,10 @@ from collections import defaultdict
 
 
 class PhraseMatcher(object):
-    def __init__(self, pattern_file, tokenizer=lambda x: x.split()):
+    def __init__(self, pattern_file, max_len=10, tokenizer=lambda x: x.split()):
         self.tokenizer = tokenizer
         self._build_vocab(pattern_file)
-        self._compile(pattern_file)
+        self._compile(pattern_file, max_len=max_len)
 
     def _build_vocab(self, fname):
         vocab = defaultdict(int)
@@ -24,7 +24,7 @@ class PhraseMatcher(object):
         vocab['<unk>'] = 0
         self.vocab = vocab
 
-    def _compile(self, fname):
+    def _compile(self, fname, max_len=10):
         self.bos = defaultdict(set)
         self.eos = defaultdict(set)
         self.checksums = defaultdict(set)
@@ -35,9 +35,13 @@ class PhraseMatcher(object):
             if 0 in arr:
                 continue
             arr_len = len(arr)
+            if arr_len > max_len:
+                continue
             self.bos[arr_len].add(arr[0])
             self.eos[arr_len].add(arr[-1])
-            self.checksums[(arr_len, arr[0], arr[-1])].add(self.checksum(arr))
+            c_arr = self.checksum(arr)
+            c_idx = self.checksum((arr_len, arr[0], arr[-1]))
+            self.checksums[c_idx].add(c_arr)
             self.lengths.add(arr_len)
 
     def checksum(self, arr):
@@ -67,7 +71,7 @@ class PhraseMatcher(object):
                     if e_int == 0:
                         continue
                     if b_int in self.bos[p_len] and e_int in self.eos[p_len]:
-                        c_idx = (p_len, b_int, e_int)
+                        c_idx = self.checksum((p_len, b_int, e_int))
                         candidates.add(((i, j), c_idx))
                         ranges.add((i, j))
 
@@ -86,6 +90,6 @@ class PhraseMatcher(object):
             checksums = self.checksums.get(c_idx)
             if not checksums:
                 continue
-            checksum = self.checksum(tok_arr[i:j])
-            if checksum in checksums:
+            c_arr = self.checksum(tok_arr[i:j])
+            if c_arr in checksums:
                 yield tok[i:j]
