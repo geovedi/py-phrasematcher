@@ -6,6 +6,8 @@ import io
 import re
 from collections import defaultdict
 
+UNK = 0
+
 
 class PhraseMatcher(object):
     def __init__(self, pattern_file, max_len=10, tokenizer=lambda x: x.split()):
@@ -21,7 +23,7 @@ class PhraseMatcher(object):
         vocab = sorted(vocab.items(), key=lambda x: x[1])
         vocab = dict((v, k + 1)
                      for k, v in enumerate(reversed([k for k, v in vocab])))
-        vocab['<unk>'] = 0
+        vocab['<unk>'] = UNK
         self.vocab = vocab
 
     def _compile(self, fname, max_len=10):
@@ -32,7 +34,7 @@ class PhraseMatcher(object):
 
         for line in io.open(fname, 'r', encoding='utf-8'):
             arr = [self.vocab.get(t.lower(), 0) for t in line.strip().split()]
-            if 0 in arr:
+            if UNK in set(arr):
                 continue
             arr_len = len(arr)
             if arr_len > max_len:
@@ -61,14 +63,14 @@ class PhraseMatcher(object):
 
         # find markers
         for i, tok_int in enumerate(tok_arr):
-            if tok_int == 0:
+            if tok_int == UNK:
                 continue
             for p_len in self.lengths:
                 b_int = tok_int
                 j = i + p_len
                 if j + 1 <= tok_len:
                     e_int = tok_arr[j - 1]
-                    if e_int == 0:
+                    if UNK in set(tok_arr[i:j]):
                         continue
                     if b_int in self.bos[p_len] and e_int in self.eos[p_len]:
                         c_idx = self.checksum((p_len, b_int, e_int))
