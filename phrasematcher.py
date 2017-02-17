@@ -67,7 +67,8 @@ class PhraseMatcher(object):
                     if e_int == 0:
                         continue
                     if b_int in self.bos[p_len] and e_int in self.eos[p_len]:
-                        candidates.add(((i, j), (p_len, b_int, e_int)))
+                        c_idx = (p_len, b_int, e_int)
+                        candidates.add(((i, j), c_idx))
                         ranges.add((i, j))
 
         if remove_subset:
@@ -81,8 +82,8 @@ class PhraseMatcher(object):
                         candidates.remove(((i, j), c_idx))
 
         # check candidates
-        for (i, j), (p_len, b_int, e_int) in candidates:
-            checksums = self.checksums.get((p_len, b_int, e_int))
+        for (i, j), c_idx in candidates:
+            checksums = self.checksums.get(c_idx)
             if not checksums:
                 continue
             checksum = self.checksum(tok_arr[i:j])
