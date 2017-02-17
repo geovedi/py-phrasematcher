@@ -19,7 +19,7 @@ kesalahan defensif terbesar
 ...
 ```
 
-### Initial usage.
+### Initial usage
 
 ```python
 from phrasematcher import PhraseMatcher
@@ -35,10 +35,7 @@ for match in matcher.match(text):
 ### Reusing database
 
 ```python
-from phrasematcher import PhraseMatcher
-
 matcher = PhraseMatcher('pmdb')
-
 ```
 
 ## Why?
