@@ -48,8 +48,7 @@ class PhraseMatcher(object):
             self.lengths.add(arr_len)
 
     def checksum(self, arr):
-        arr_str = ''.join(map(lambda x: chr(x % 128), arr))
-        return binascii.crc32(arr_str)
+        return binascii.crc32(str(arr))
 
     def match(self, sentence, remove_subset=False):
         tok = self.tokenizer(sentence.strip())
