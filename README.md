@@ -2,6 +2,15 @@
 
 Fast and resource-friendly Python phrase matcher.
 
+## Requirements
+
+The following modules are required:
+
+- vedis
+- xxhash
+
+
+
 ## Usage
 
 It takes a plain pattern file as input.
