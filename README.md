@@ -35,7 +35,9 @@ from phrasematcher import PhraseMatcher
 
 matcher = PhraseMatcher('pmdb', pattern_file='patterns.txt')
 
-text = '''menurut analisa squawka , mu adalah satu di antara lima kesebelasan dengan kesalahan defensif terbesar di epl musim lalu -- walau hanya tiga gol yang masuk ke gawang mereka dari sejumlah kesalahan itu .'''
+text = '''menurut analisa squawka , mu adalah satu di antara lima kesebelasan
+          dengan kesalahan defensif terbesar di epl musim lalu -- walau hanya
+          tiga gol yang masuk ke gawang mereka dari sejumlah kesalahan itu .'''
 
 for match in matcher.match(text):
     print(match)
