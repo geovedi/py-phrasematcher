@@ -4,6 +4,7 @@ from __future__ import unicode_literals
 
 import io
 import re
+import binascii
 from collections import defaultdict
 
 UNK = 0
@@ -42,17 +43,13 @@ class PhraseMatcher(object):
             self.bos[arr_len].add(arr[0])
             self.eos[arr_len].add(arr[-1])
             c_arr = self.checksum(arr)
-            c_idx = self.checksum((arr_len, arr[0], arr[-1]))
+            c_idx = (arr_len, arr[0], arr[-1])
             self.checksums[c_idx].add(c_arr)
             self.lengths.add(arr_len)
 
     def checksum(self, arr):
-        """fletcher checksum"""
-        sum1 = sum2 = 0
-        for v in arr:
-            sum1 = (sum1 + v) % 255
-            sum2 = (sum1 + sum1) % 255
-        return (sum1 * 256) + sum2
+        arr_str = ''.join(map(lambda x: chr(x % 128), arr))
+        return binascii.crc32(arr_str)
 
     def match(self, sentence, remove_subset=False):
         tok = self.tokenizer(sentence.strip())
@@ -73,7 +70,7 @@ class PhraseMatcher(object):
                     if UNK in set(tok_arr[i:j]):
                         continue
                     if b_int in self.bos[p_len] and e_int in self.eos[p_len]:
-                        c_idx = self.checksum((p_len, b_int, e_int))
+                        c_idx = (p_len, b_int, e_int)
                         candidates.add(((i, j), c_idx))
                         ranges.add((i, j))
 
