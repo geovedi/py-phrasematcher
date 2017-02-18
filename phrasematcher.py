@@ -128,19 +128,19 @@ class PhraseMatcher(object):
                 continue
 
             for p_len in self.patterns.p_len:
-                j = i + p_len
+                j = i + p_len - 1
                 if j + 1 > tok_len:
                     continue
 
-                p_ints = tok_ints[i:j]
+                p_ints = tok_ints[i:j + 1]
                 if None in set(p_ints):
                     continue
 
-                e_int = tok_ints[j - 1]
+                e_int = tok_ints[j]
                 if e_int == None:
                     continue
 
-                p_hash = self.hash(' '.join(tok[i:j]))
+                p_hash = self.hash(' '.join(tok[i:j + 1]))
                 p_obj = (p_len, b_int, e_int, p_hash)
 
                 if p_obj in self.patterns.p_obj:
@@ -161,5 +161,5 @@ class PhraseMatcher(object):
                             pass
 
         for (i, j) in candidates:
-            yield tok[i:j]
+            yield tok[i:j + 1]
 
