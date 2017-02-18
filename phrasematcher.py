@@ -124,15 +124,17 @@ class PhraseMatcher(object):
             if n_patterns % 100000 == 0:
                 logging.info('Storing patterns: {}'.format(n_patterns))
                 for j in self.lengths:
-                    self.tables[j].mset(bufs[j])
-                    self.tables[j].commit()
-                    bufs[j] = {}
+                    if bufs[j]:
+                        self.tables[j].mset(bufs[j])
+                        self.tables[j].commit()
+                        bufs[j] = {}
 
         logging.info('Storing patterns: {}'.format(n_patterns))
         for j in self.lengths:
-            self.tables[j].mset(bufs[j])
-            self.tables[j].commit()
-            bufs[j] = {}
+            if bufs[j]:
+                self.tables[j].mset(bufs[j])
+                self.tables[j].commit()
+                bufs[j] = {}
 
         for i in range(1, max_len + 1):
             if i not in self.lengths:
@@ -145,7 +147,7 @@ class PhraseMatcher(object):
 
     def hash(self, arr):
         s = b':'.join(['{}'.format(i) for i in arr])
-        return xxhash.xxh64(s).digest()
+        return b'{}'.format(xxhash.xxh64(s).digest())
 
     def _hash_check(self, p_len, p_hash):
         return p_hash in self.tables[p_len]
