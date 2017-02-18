@@ -47,7 +47,7 @@ class PhraseMatcher(object):
         else:
             self.tables = {}
             for i in self.lengths:
-                self.tables[i] = (vedis.Vedis('{}/tables.{:02d}'
+                self.tables[i] = (vedis.Vedis('{}/tables.{}'
                                               .format(self.model_dir, i)))
 
     def _read_vocab(self, fname):
@@ -92,7 +92,7 @@ class PhraseMatcher(object):
 
         for j in range(1, max_len + 1):
             bufs[j] = {}
-            self.tables[j] = (vedis.Vedis('{}/tables.{:02d}'
+            self.tables[j] = (vedis.Vedis('{}/tables.{}'
                                           .format(self.model_dir, j)))
             self.tables[j].begin()
 
@@ -133,6 +133,12 @@ class PhraseMatcher(object):
             self.tables[j].mset(bufs[j])
             self.tables[j].commit()
             bufs[j] = {}
+
+        for i in range(1, max_len + 1):
+            if i not in self.lengths:
+                os.remove('{}/tables.{}'.format(self.model_dir, i))
+                os.remove('{}/tables.{}_vedis_journal'
+                          .format(self.model_dir, i))
 
         with open('{}/model'.format(self.model_dir), 'wb') as fout:
             pickle.dump((self.vocab, self.b, self.e, self.lengths), fout)
