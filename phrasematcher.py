@@ -5,8 +5,10 @@ from __future__ import unicode_literals
 import os
 import io
 import re
+import pickle
 import vedis
 import xxhash
+from collections import defaultdict
 
 import logging
 logging.basicConfig(
@@ -26,9 +28,12 @@ class PhraseMatcher(object):
         self.model_dir = model_dir
         if not os.path.exists(model_dir):
             os.makedirs(model_dir)
-        self.vocab = vedis.Vedis('{}/vocab'.format(self.model_dir))
-        self.bos = vedis.Vedis('{}/bos'.format(self.model_dir))
-        self.eos = vedis.Vedis('{}/eos'.format(self.model_dir))
+        try:
+            fin = open('{}/model'.format(self.model_dir), 'rb')
+            (self.vocab, self.bos, self.eos, self.lengths) = pickle.load(fin)
+        except:
+            self.vocab = {}
+            self.bos, self.eos, self.lengths = set(), set(), set()
         self.hashtable = vedis.Vedis('{}/hashtable'.format(self.model_dir))
         if pattern_file:
             if vocab_file:
@@ -36,78 +41,69 @@ class PhraseMatcher(object):
             else:
                 self._build_vocab(pattern_file)
             self._compile(pattern_file, max_len=max_len)
-        else:
-            with io.open('{}/lengths'.format(self.model_dir), 'r') as fin:
-                self.lengths = set(map(int, fin.read().split()))
 
     def _read_vocab(self, fname):
         logging.info('Reading vocab file...')
-        from collections import defaultdict
         wc = defaultdict(int)
         for line in io.open(fname, 'r', encoding='utf-8'):
-            line = line.encode('utf-8')
             parts = self.tokenizer(line.lower().strip())
             word = parts[0]
             if word not in wc:
-                wc[b'v:{}'.format(word)] = str(len(wc))
+                wc[word] = len(wc)
         n_vocab = len(wc)
-        with self.vocab.transaction():
-            self.vocab.mset(dict(wc))
+        self.vocab = wc
+        with open('{}/model'.format(self.model_dir), 'wb') as fout:
+            pickle.dump((self.vocab, self.bos, self.eos, self.lengths), fout)
         logging.info('Vocab size: {}'.format(n_vocab))
 
     def _build_vocab(self, fname):
         logging.info('Start building vocab...')
-        from collections import defaultdict
         wc = defaultdict(int)
         for line in io.open(fname, 'r', encoding='utf-8'):
-            line = line.encode('utf-8')
-            for token in self.tokenizer(line.strip()):
-                wc[b'v:{}'.format(token.lower())] += 1
+            for word in self.tokenizer(line.lower().strip()):
+                wc[word] += 1
         wc = sorted(wc.items(), key=lambda x: x[1])
-        wc = dict((v, str(k))
-                  for k, v in enumerate(reversed([k for k, v in wc])))
+        wc = dict((v, k) for k, v in enumerate(reversed([k for k, v in wc])))
         n_vocab = len(wc)
-        with self.vocab.transaction():
-            self.vocab.mset(dict(wc))
+        self.vocab = wc
+        with open('{}/model'.format(self.model_dir), 'wb') as fout:
+            pickle.dump((self.vocab, self.bos, self.eos, self.lengths), fout)
         logging.info('Vocab size: {}'.format(n_vocab))
 
     def _compile(self, fname, max_len=10):
         logging.info('Start compiling patterns...')
-        self.lengths = set()
         n_patterns = 0
-        with self.bos.transaction(), self.eos.transaction(), \
-             self.hashtable.transaction():
-            for i, line in enumerate(io.open(fname, 'r', encoding='utf-8')):
-                if i % 10000 == 0:
-                    logging.info('Processing patterns: {}'.format(i))
-                if isinstance(line, unicode):
-                    line = line.encode('utf-8')
-                arr = line.strip().split()
-                arr = self.vocab.mget([b'v:{}'.format(t) for t in arr])
-                if None in set(arr):
-                    continue
-                arr = [int(a) for a in arr]
-                arr_len = len(arr)
-                if arr_len > max_len:
-                    continue
-                self.bos[b'b:{}:{}'.format(arr_len, arr[0])] = b'1'
-                self.eos[b'e:{}:{}'.format(arr_len, arr[-1])] = b'1'
-                self.hashtable[self.hash(arr)] = b'1'
-                self.lengths.add(arr_len)
-                n_patterns += 1
+        hash_buf = {}
+        self.hashtable.begin()
+        for i, line in enumerate(io.open(fname, 'r', encoding='utf-8')):
+            if i % 100000 == 0:
+                logging.info('Processing patterns: {}'.format(i))
+                self.hashtable.mset(hash_buf)
+                hash_buf = {}
+                self.hashtable.commit()
+            arr = line.strip().split()
+            arr = [self.vocab.get(t, None) for t in arr]
+            arr_len = len(arr)
+            if None in set(arr) or arr_len > max_len:
+                continue
+            self.bos.add(b'b:{}:{}'.format(arr_len, arr[0]))
+            self.eos.add(b'e:{}:{}'.format(arr_len, arr[-1]))
+            hash_buf[self.hash(arr)] = b'1'
+            self.lengths.add(arr_len)
+            n_patterns += 1
+        self.hashtable.mset(hash_buf)
+        self.hashtable.commit()
         logging.info('Patterns: {} (Read: {})'.format(n_patterns, i + 1))
-        with io.open('{}/lengths'.format(self.model_dir), 'w') as fout:
-            fout.write(' '.join(str(i) for i in self.lengths))
+        with open('{}/model'.format(self.model_dir), 'wb') as fout:
+            pickle.dump((self.vocab, self.bos, self.eos, self.lengths), fout)
 
     def hash(self, arr):
         s = b':'.join([str(i) for i in arr])
         return 'h:' + xxhash.xxh32(s).hexdigest()
 
     def match(self, sentence, remove_subset=False):
-        if isinstance(sentence, unicode):
-            sentence = sentence.encode('utf-8')
         tok = self.tokenizer(sentence.strip())
-        tok_arr = self.vocab.mget([b'v:{}'.format(t) for t in tok])
+        tok_arr = [self.vocab.get(t, None) for t in tok]
         tok_len = len(tok_arr)
         candidates = set()
         for i, tok_int in enumerate(tok_arr):
