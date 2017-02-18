@@ -30,10 +30,10 @@ class PhraseMatcher(object):
             os.makedirs(model_dir)
         try:
             fin = open('{}/model'.format(self.model_dir), 'rb')
-            (self.vocab, self.bos, self.eos, self.lengths) = pickle.load(fin)
+            (self.vocab, self.segment, self.lengths) = pickle.load(fin)
         except:
             self.vocab = {}
-            self.bos, self.eos, self.lengths = set(), set(), set()
+            self.segment, self.lengths = set(), set()
         self.hashtable = vedis.Vedis('{}/hashtable'.format(self.model_dir))
         if pattern_file:
             if vocab_file:
@@ -53,7 +53,7 @@ class PhraseMatcher(object):
         n_vocab = len(wc)
         self.vocab = wc
         with open('{}/model'.format(self.model_dir), 'wb') as fout:
-            pickle.dump((self.vocab, self.bos, self.eos, self.lengths), fout)
+            pickle.dump((self.vocab, self.segment, self.lengths), fout)
         logging.info('Vocab size: {}'.format(n_vocab))
 
     def _build_vocab(self, fname):
@@ -67,7 +67,7 @@ class PhraseMatcher(object):
         n_vocab = len(wc)
         self.vocab = wc
         with open('{}/model'.format(self.model_dir), 'wb') as fout:
-            pickle.dump((self.vocab, self.bos, self.eos, self.lengths), fout)
+            pickle.dump((self.vocab, self.segment, self.lengths), fout)
         logging.info('Vocab size: {}'.format(n_vocab))
 
     def _compile(self, fname, max_len=10):
@@ -76,30 +76,31 @@ class PhraseMatcher(object):
         hash_buf = {}
         self.hashtable.begin()
         for i, line in enumerate(io.open(fname, 'r', encoding='utf-8')):
-            if i % 100000 == 0:
+            if i % 1000000 == 0:
                 logging.info('Processing patterns: {}'.format(i))
                 self.hashtable.mset(hash_buf)
                 hash_buf = {}
                 self.hashtable.commit()
-            arr = line.strip().split()
-            arr = [self.vocab.get(t, None) for t in arr]
-            arr_len = len(arr)
-            if None in set(arr) or arr_len > max_len:
+            p_arr = line.strip().split()
+            p_arr = [self.vocab.get(t, None) for t in p_arr]
+            p_len = len(p_arr)
+            if None in set(p_arr) or p_len > max_len:
                 continue
-            self.bos.add(b'b:{}:{}'.format(arr_len, arr[0]))
-            self.eos.add(b'e:{}:{}'.format(arr_len, arr[-1]))
-            hash_buf[self.hash(arr)] = b'1'
-            self.lengths.add(arr_len)
+            p_idx = '{}:{}:{}'.format(p_len, p_arr[0], p_arr[-1])
+            p_hash = self.hash(p_arr)
+            self.segment.add(p_idx)
+            hash_buf[p_hash] = b'1'
+            self.lengths.add(p_len)
             n_patterns += 1
         self.hashtable.mset(hash_buf)
         self.hashtable.commit()
         logging.info('Patterns: {} (Read: {})'.format(n_patterns, i + 1))
         with open('{}/model'.format(self.model_dir), 'wb') as fout:
-            pickle.dump((self.vocab, self.bos, self.eos, self.lengths), fout)
+            pickle.dump((self.vocab, self.segment, self.lengths), fout)
 
     def hash(self, arr):
-        s = b':'.join([str(i) for i in arr])
-        return 'h:' + xxhash.xxh32(s).hexdigest()
+        s = b':'.join(['{}'.format(i) for i in arr])
+        return xxhash.xxh32(s).hexdigest()
 
     def match(self, sentence, remove_subset=False):
         tok = self.tokenizer(sentence.strip())
@@ -117,11 +118,10 @@ class PhraseMatcher(object):
                     if None in set(p_arr):
                         continue
                     e_int = int(tok_arr[j - 1])
-                    b_idx = b'b:{}:{}'.format(p_len, b_int)
-                    e_idx = b'e:{}:{}'.format(p_len, e_int)
-                    if b_idx in self.bos and e_idx in self.eos:
-                        if self.hash(p_arr) in self.hashtable:
-                            candidates.add((i, j))
+                    p_idx = '{}:{}:{}'.format(p_len, b_int, e_int)
+                    p_hash = self.hash(p_arr)
+                    if p_idx in self.segment and p_hash in self.hashtable:
+                        candidates.add((i, j))
         if remove_subset:
             ranges = list(sorted(candidates, reverse=True))
             for (i, j), c_idx in list(candidates):
@@ -132,3 +132,4 @@ class PhraseMatcher(object):
                         candidates.remove((i, j))
         for (i, j) in candidates:
             yield tok[i:j]
+
