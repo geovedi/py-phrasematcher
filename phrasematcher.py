@@ -124,7 +124,7 @@ class PhraseMatcher(object):
                         candidates.add((i, j))
         if remove_subset:
             ranges = list(sorted(candidates, reverse=True))
-            for (i, j), c_idx in list(candidates):
+            for (i, j) in list(candidates):
                 for ii, jj in ranges:
                     if i == ii and j == jj:
                         continue
