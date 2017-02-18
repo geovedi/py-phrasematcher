@@ -90,9 +90,6 @@ class PhraseMatcher(object):
         for i, line in enumerate(io.open(fname, 'r', encoding='utf-8')):
             if i % 10000 == 0:
                 logging.info('Processing patterns: {}'.format(i))
-                self.hashtable.mset(hash_buf)
-                hash_buf = {}
-                self.hashtable.commit()
 
             p_arr = line.strip().split()
             p_len = len(p_arr)
@@ -114,6 +111,11 @@ class PhraseMatcher(object):
 
             self.lengths.add(p_len)
             n_patterns += 1
+
+            if n_patterns % 100000 == 0:
+                self.hashtable.mset(hash_buf)
+                self.hashtable.commit()
+                hash_buf = {}
 
         self.hashtable.mset(hash_buf)
         self.hashtable.commit()
