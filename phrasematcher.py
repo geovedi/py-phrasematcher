@@ -37,8 +37,6 @@ class PhraseMatcher(object):
             self.vocab = {}
             self.b, self.e, self.lengths = set(), set(), set()
 
-        self.hashtable = vedis.Vedis('{}/hashtable'.format(self.model_dir))
-
         if pattern_file:
             if vocab_file:
                 self._read_vocab(vocab_file)
@@ -46,6 +44,11 @@ class PhraseMatcher(object):
                 self._build_vocab(pattern_file)
 
             self._compile(pattern_file, max_len=max_len)
+        else:
+            self.tables = {}
+            for i in self.lengths:
+                self.tables[i] = (vedis.Vedis('{}/tables.{:02d}'
+                                              .format(self.model_dir, i)))
 
     def _read_vocab(self, fname):
         logging.info('Reading vocab file...')
@@ -84,12 +87,18 @@ class PhraseMatcher(object):
     def _compile(self, fname, max_len=10):
         logging.info('Start compiling patterns...')
         n_patterns = 0
-        hash_buf = {}
-        self.hashtable.begin()
+        bufs = {}
+        self.tables = {}
+
+        for j in range(1, max_len + 1):
+            bufs[j] = {}
+            self.tables[j] = (vedis.Vedis('{}/tables.{:02d}'
+                                          .format(self.model_dir, j)))
+            self.tables[j].begin()
 
         for i, line in enumerate(io.open(fname, 'r', encoding='utf-8')):
             if i % 10000 == 0:
-                logging.info('Processing patterns: {}'.format(i))
+                logging.info('Processing input patterns: {}'.format(i))
 
             p_arr = line.strip().split()
             p_len = len(p_arr)
@@ -107,26 +116,30 @@ class PhraseMatcher(object):
             self.e.add(e_idx)
 
             p_hash = self.hash(p_arr)
-            hash_buf[p_hash] = b'1'
+            bufs[p_len][p_hash] = b'1'
 
             self.lengths.add(p_len)
             n_patterns += 1
 
             if n_patterns % 100000 == 0:
-                self.hashtable.mset(hash_buf)
-                self.hashtable.commit()
-                hash_buf = {}
+                logging.info('Storing patterns: {}'.format(n_patterns))
+                for j in self.lengths:
+                    self.tables[j].mset(bufs[j])
+                    self.tables[j].commit()
+                    bufs[j] = {}
 
-        self.hashtable.mset(hash_buf)
-        self.hashtable.commit()
-        logging.info('Patterns: {} (Read: {})'.format(n_patterns, i + 1))
+        logging.info('Storing patterns: {}'.format(n_patterns))
+        for j in self.lengths:
+            self.tables[j].mset(bufs[j])
+            self.tables[j].commit()
+            bufs[j] = {}
 
         with open('{}/model'.format(self.model_dir), 'wb') as fout:
             pickle.dump((self.vocab, self.b, self.e, self.lengths), fout)
 
     def hash(self, arr):
         s = b':'.join(['{}'.format(i) for i in arr])
-        return xxhash.xxh32(s).hexdigest()
+        return '{}'.format(xxhash.xxh32(s).intdigest())
 
     def match(self, sentence, remove_subset=False):
         tok = self.tokenizer(sentence.strip())
@@ -160,7 +173,7 @@ class PhraseMatcher(object):
                     continue
 
                 p_hash = self.hash(p_arr)
-                if p_hash in self.hashtable:
+                if p_hash in self.tables[p_len]:
                     candidates.add((i, j))
 
         if remove_subset:
