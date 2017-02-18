@@ -30,7 +30,6 @@ class PhraseMatcher(object):
         self.bos = vedis.Vedis('{}/bos'.format(self.model_dir))
         self.eos = vedis.Vedis('{}/eos'.format(self.model_dir))
         self.hashtable = vedis.Vedis('{}/hashtable'.format(self.model_dir))
-
         if pattern_file:
             if vocab_file:
                 self._read_vocab(vocab_file)
@@ -76,31 +75,26 @@ class PhraseMatcher(object):
         logging.info('Start compiling patterns...')
         self.lengths = set()
         n_patterns = 0
-        for db in [self.bos, self.eos, self.hashtable]:
-            db.begin()
-        for i, line in enumerate(io.open(fname, 'r', encoding='utf-8')):
-            if i % 10000 == 0:
-                logging.info('Processing patterns: {}'.format(i))
-                for db in [self.bos, self.eos, self.hashtable]:
-                    db.commit()
-                    db.begin()
-            if isinstance(line, unicode):
-                line = line.encode('utf-8')
-            arr = line.strip().split()
-            arr = self.vocab.mget([b'v:{}'.format(t) for t in arr])
-            if None in set(arr):
-                continue
-            arr = [int(a) for a in arr]
-            arr_len = len(arr)
-            if arr_len > max_len:
-                continue
-            self.bos[b'b:{}:{}'.format(arr_len, arr[0])] = b'1'
-            self.eos[b'e:{}:{}'.format(arr_len, arr[-1])] = b'1'
-            self.hashtable[self.hash(arr)] = b'1'
-            self.lengths.add(arr_len)
-            n_patterns += 1
-        for db in [self.bos, self.eos, self.hashtable]:
-            db.commit()
+        with self.bos.transaction(), self.eos.transaction(), \
+             self.hashtable.transaction():
+            for i, line in enumerate(io.open(fname, 'r', encoding='utf-8')):
+                if i % 10000 == 0:
+                    logging.info('Processing patterns: {}'.format(i))
+                if isinstance(line, unicode):
+                    line = line.encode('utf-8')
+                arr = line.strip().split()
+                arr = self.vocab.mget([b'v:{}'.format(t) for t in arr])
+                if None in set(arr):
+                    continue
+                arr = [int(a) for a in arr]
+                arr_len = len(arr)
+                if arr_len > max_len:
+                    continue
+                self.bos[b'b:{}:{}'.format(arr_len, arr[0])] = b'1'
+                self.eos[b'e:{}:{}'.format(arr_len, arr[-1])] = b'1'
+                self.hashtable[self.hash(arr)] = b'1'
+                self.lengths.add(arr_len)
+                n_patterns += 1
         logging.info('Patterns: {} (Read: {})'.format(n_patterns, i + 1))
         with io.open('{}/lengths'.format(self.model_dir), 'w') as fout:
             fout.write(' '.join(str(i) for i in self.lengths))
@@ -113,11 +107,9 @@ class PhraseMatcher(object):
         if isinstance(sentence, unicode):
             sentence = sentence.encode('utf-8')
         tok = self.tokenizer(sentence.strip())
-        with self.vocab.transaction():
-            tok_arr = self.vocab.mget([b'v:{}'.format(t) for t in tok])
+        tok_arr = self.vocab.mget([b'v:{}'.format(t) for t in tok])
         tok_len = len(tok_arr)
         candidates = set()
-
         for i, tok_int in enumerate(tok_arr):
             if tok_int == None:
                 continue
@@ -134,7 +126,6 @@ class PhraseMatcher(object):
                     if b_idx in self.bos and e_idx in self.eos:
                         if self.hash(p_arr) in self.hashtable:
                             candidates.add((i, j))
-
         if remove_subset:
             ranges = list(sorted(candidates, reverse=True))
             for (i, j), c_idx in list(candidates):
@@ -143,6 +134,5 @@ class PhraseMatcher(object):
                         continue
                     if ii <= i and j <= jj:
                         candidates.remove((i, j))
-
         for (i, j) in candidates:
             yield tok[i:j]
