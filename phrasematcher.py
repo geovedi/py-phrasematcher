@@ -145,7 +145,10 @@ class PhraseMatcher(object):
 
     def hash(self, arr):
         s = b':'.join(['{}'.format(i) for i in arr])
-        return '{}'.format(xxhash.xxh32(s).intdigest())
+        return xxhash.xxh64(s).digest()
+
+    def _hash_check(self, p_len, p_hash):
+        return p_hash in self.tables[p_len]
 
     def match(self, sentence, remove_subset=False):
         tok = self.tokenizer(sentence.strip())
@@ -162,16 +165,14 @@ class PhraseMatcher(object):
                 if j + 1 > tok_len:
                     continue
 
-                b_idx = '{}:{}'.format(p_len, b_tok)
-                if b_idx not in self.b:
+                if not '{}:{}'.format(p_len, b_tok) in self.b:
                     continue
 
                 e_tok = tok_arr[j - 1]
                 if e_tok == None:
                     continue
 
-                e_idx = '{}:{}'.format(p_len, e_tok)
-                if e_idx not in self.e:
+                if not '{}:{}'.format(p_len, e_tok) in self.e:
                     continue
 
                 p_arr = tok_arr[i:j]
@@ -179,7 +180,7 @@ class PhraseMatcher(object):
                     continue
 
                 p_hash = self.hash(p_arr)
-                if p_hash in self.tables[p_len]:
+                if self._hash_check(p_len, p_hash):
                     candidates.add((i, j))
 
         if remove_subset:
