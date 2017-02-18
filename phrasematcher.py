@@ -129,7 +129,10 @@ class PhraseMatcher(object):
                     if i == ii and j == jj:
                         continue
                     if ii <= i and j <= jj:
-                        candidates.remove((i, j))
+                        try:
+                            candidates.remove((i, j))
+                        except KeyError:
+                            pass
         for (i, j) in candidates:
             yield tok[i:j]
 
