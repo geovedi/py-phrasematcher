@@ -76,7 +76,7 @@ class PhraseMatcher(object):
         hash_buf = {}
         self.hashtable.begin()
         for i, line in enumerate(io.open(fname, 'r', encoding='utf-8')):
-            if i % 1000000 == 0:
+            if i % 10000 == 0:
                 logging.info('Processing patterns: {}'.format(i))
                 self.hashtable.mset(hash_buf)
                 hash_buf = {}
