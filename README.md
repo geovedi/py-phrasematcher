@@ -53,8 +53,8 @@ matcher = PhraseMatcher('pmdb')
 
 Short answer: I'm bored.
 
-Long answer: Doing n-gram lookups is a waste of time and resources. Here we rejecting candidates that has OOV, only lookup first and last tokens and then check if the candidate pattern is in the hashtable.
+Long answer: Doing n-gram lookups is a waste of time and resources. Here we will reject candidates with OOV, lookup only first and last tokens and then check if the candidate pattern is in the hashtable.
 
-In previous version, it requires 12GB, using normal Python dict, to store 150K vocab and 30M patterns. To reduce memory usage, we now use `vedis` to store dictionary on disk.
+To reduce memory usage, we now use `vedis` to store hashtable on disk.
 
 
