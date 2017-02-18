@@ -50,7 +50,7 @@ class PhraseMatcher(object):
             parts = self.tokenizer(line.lower().strip())
             word = parts[0]
             if word not in wc:
-                wc[b'v:' + word] = str(len(wc))
+                wc[b'v:{}'.format(word)] = str(len(wc))
         n_vocab = len(wc)
         with self.vocab.transaction():
             self.vocab.mset(dict(wc))
@@ -63,7 +63,7 @@ class PhraseMatcher(object):
         for line in io.open(fname, 'r', encoding='utf-8'):
             line = line.encode('utf-8')
             for token in self.tokenizer(line.strip()):
-                wc[b'v:' + token.lower()] += 1
+                wc[b'v:{}'.format(token.lower())] += 1
         wc = sorted(wc.items(), key=lambda x: x[1])
         wc = dict((v, str(k))
                   for k, v in enumerate(reversed([k for k, v in wc])))
@@ -86,7 +86,8 @@ class PhraseMatcher(object):
                     db.begin()
             if isinstance(line, unicode):
                 line = line.encode('utf-8')
-            arr = self.vocab.mget([b'v:' + t for t in line.strip().split()])
+            arr = line.strip().split()
+            arr = self.vocab.mget([b'v:{}'.format(t) for t in arr])
             if None in set(arr):
                 continue
             arr = [int(a) for a in arr]
@@ -113,7 +114,7 @@ class PhraseMatcher(object):
             sentence = sentence.encode('utf-8')
         tok = self.tokenizer(sentence.strip())
         with self.vocab.transaction():
-            tok_arr = self.vocab.mget([b'v:' + t for t in tok])
+            tok_arr = self.vocab.mget([b'v:{}'.format(t) for t in tok])
         tok_len = len(tok_arr)
         candidates = set()
 
