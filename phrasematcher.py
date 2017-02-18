@@ -47,8 +47,8 @@ class PhraseMatcher(object):
         else:
             self.tables = {}
             for i in self.lengths:
-                self.tables[i] = (vedis.Vedis('{}/tables.{}'
-                                              .format(self.model_dir, i)))
+                table_fname = '{}/tables.{}'.format(self.model_dir, i)
+                self.tables[i] = vedis.Vedis(table_fname, open_database=True)
 
     def _read_vocab(self, fname):
         logging.info('Reading vocab file...')
@@ -87,13 +87,11 @@ class PhraseMatcher(object):
     def _compile(self, fname, max_len=10):
         logging.info('Start compiling patterns...')
         n_patterns = 0
-        bufs = {}
         self.tables = {}
 
         for j in range(1, max_len + 1):
-            bufs[j] = {}
-            self.tables[j] = (vedis.Vedis('{}/tables.{}'
-                                          .format(self.model_dir, j)))
+            table_fname = '{}/tables.{}'.format(self.model_dir, j)
+            self.tables[j] = vedis.Vedis(table_fname, open_database=True)
             self.tables[j].begin()
 
         for i, line in enumerate(io.open(fname, 'r', encoding='utf-8')):
@@ -116,7 +114,7 @@ class PhraseMatcher(object):
             self.e.add(e_idx)
 
             p_hash = self.hash(p_arr)
-            bufs[p_len][p_hash] = b'1'
+            self.tables[p_len][p_hash] = b'1'
 
             self.lengths.add(p_len)
             n_patterns += 1
@@ -124,17 +122,12 @@ class PhraseMatcher(object):
             if n_patterns % 100000 == 0:
                 logging.info('Storing patterns: {}'.format(n_patterns))
                 for j in self.lengths:
-                    if bufs[j]:
-                        self.tables[j].mset(bufs[j])
-                        self.tables[j].commit()
-                        bufs[j] = {}
+                    self.tables[j].commit()
 
         logging.info('Storing patterns: {}'.format(n_patterns))
         for j in self.lengths:
-            if bufs[j]:
-                self.tables[j].mset(bufs[j])
-                self.tables[j].commit()
-                bufs[j] = {}
+            self.tables[j].commit()
+            self.tables[j].close()
 
         for i in range(1, max_len + 1):
             if i not in self.lengths:
@@ -147,7 +140,7 @@ class PhraseMatcher(object):
 
     def hash(self, arr):
         s = b':'.join(['{}'.format(i) for i in arr])
-        return b'{}'.format(xxhash.xxh64(s).digest())
+        return b'{}'.format(xxhash.xxh64(s).hexdigest())
 
     def _hash_check(self, p_len, p_hash):
         return p_hash in self.tables[p_len]
