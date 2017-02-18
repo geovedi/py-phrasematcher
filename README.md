@@ -2,14 +2,6 @@
 
 Fast and resource-friendly Python phrase matcher.
 
-## Requirements
-
-The following modules are required:
-
-- vedis
-- xxhash
-
-
 
 ## Usage
 
@@ -55,6 +47,5 @@ Short answer: I'm bored.
 
 Long answer: Doing n-gram lookups is a waste of time and resources. Here we will reject candidates with OOV, lookup only first and last tokens and then check if the candidate pattern is in the hashtable.
 
-To reduce memory usage, we now use `vedis` to store hashtable on disk.
 
 
