@@ -104,7 +104,8 @@ class PhraseMatcher(object):
             if None in set(p_ints):
                 continue
 
-            p_obj = (p_len, p_ints[0], p_ints[-1], self.hash(p_ints))
+            p_hash = self.hash(' '.join(p_arr))
+            p_obj = (p_len, p_ints[0], p_ints[-1], p_hash)
 
             self.patterns.p_obj.add(p_obj)
             self.patterns.p_len.add(p_len)
@@ -112,8 +113,8 @@ class PhraseMatcher(object):
         with open('{}/patterns.p'.format(self.model_dir), 'wb') as fout:
             pickle.dump(self.patterns, fout, -1)
 
-    def hash(self, arr):
-        s = ' '.join('{}'.format(i) for i in arr)
+    def hash(self, text):
+        s = text.encode('utf-8')
         return binascii.crc32(s) % (1 << 32)
 
     def match(self, sentence, remove_subset=False):
@@ -139,7 +140,7 @@ class PhraseMatcher(object):
                 if e_int == None:
                     continue
 
-                p_hash = self.hash(tok_ints[i:j])
+                p_hash = self.hash(' '.join(tok[i:j]))
                 p_obj = (p_len, b_int, e_int, p_hash)
 
                 if p_obj in self.patterns.p_obj:
