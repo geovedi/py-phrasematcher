@@ -5,9 +5,9 @@ from __future__ import unicode_literals
 import os
 import io
 import re
+import binascii
 import pickle
-import vedis
-import xxhash
+
 from collections import defaultdict
 
 import logging
@@ -15,6 +15,14 @@ logging.basicConfig(
     format='%(asctime)s [%(process)d] [%(levelname)s] %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S',
     level=logging.INFO)
+
+
+class Patterns(object):
+    __slots__ = ('p_len', 'p_obj')
+
+    def __init__(self):
+        self.p_len = set()
+        self.p_obj = set()
 
 
 class PhraseMatcher(object):
@@ -30,13 +38,6 @@ class PhraseMatcher(object):
         if not os.path.exists(model_dir):
             os.makedirs(model_dir)
 
-        try:
-            fin = open('{}/model'.format(self.model_dir), 'rb')
-            (self.vocab, self.b, self.e, self.lengths) = pickle.load(fin)
-        except:
-            self.vocab = {}
-            self.b, self.e, self.lengths = set(), set(), set()
-
         if pattern_file:
             if vocab_file:
                 self._read_vocab(vocab_file)
@@ -45,10 +46,11 @@ class PhraseMatcher(object):
 
             self._compile(pattern_file, max_len=max_len)
         else:
-            self.tables = {}
-            for i in self.lengths:
-                table_fname = '{}/tables.{}'.format(self.model_dir, i)
-                self.tables[i] = vedis.Vedis(table_fname, open_database=True)
+            fin = open('{}/vocab.p'.format(self.model_dir), 'rb')
+            self.vocab = pickle.load(fin)
+
+            fin = open('{}/patterns.p'.format(self.model_dir), 'rb')
+            self.patterns = pickle.load(fin)
 
     def _read_vocab(self, fname):
         logging.info('Reading vocab file...')
@@ -61,10 +63,10 @@ class PhraseMatcher(object):
                 wc[word] = len(wc)
 
         n_vocab = len(wc)
-        self.vocab = wc
+        self.vocab = dict(wc)
 
-        with open('{}/model'.format(self.model_dir), 'wb') as fout:
-            pickle.dump((self.vocab, self.b, self.e, self.lengths), fout)
+        with open('{}/vocab.p'.format(self.model_dir), 'wb') as fout:
+            pickle.dump(self.vocab, fout, -1)
         logging.info('Vocab size: {}'.format(n_vocab))
 
     def _build_vocab(self, fname):
@@ -80,100 +82,67 @@ class PhraseMatcher(object):
         n_vocab = len(wc)
         self.vocab = wc
 
-        with open('{}/model'.format(self.model_dir), 'wb') as fout:
-            pickle.dump((self.vocab, self.b, self.e, self.lengths), fout)
+        with open('{}/vocab.p'.format(self.model_dir), 'wb') as fout:
+            pickle.dump(self.vocab, fout, -1)
         logging.info('Vocab size: {}'.format(n_vocab))
 
     def _compile(self, fname, max_len=10):
         logging.info('Start compiling patterns...')
-        n_patterns = 0
-        self.tables = {}
+        self.patterns = Patterns()
 
-        for j in range(1, max_len + 1):
-            table_fname = '{}/tables.{}'.format(self.model_dir, j)
-            self.tables[j] = vedis.Vedis(table_fname, open_database=True)
-            self.tables[j].begin()
-
-        for i, line in enumerate(io.open(fname, 'r', encoding='utf-8')):
-            if i % 10000 == 0:
+        for i, pat in enumerate(io.open(fname, 'r', encoding='utf-8')):
+            if i % 100000 == 0:
                 logging.info('Processing input patterns: {}'.format(i))
 
-            p_arr = line.strip().split()
+            p_arr = pat.strip().split()
             p_len = len(p_arr)
 
             if p_len > max_len:
                 continue
 
-            p_arr = [self.vocab.get(t, None) for t in p_arr]
-            if None in set(p_arr):
+            p_ints = [self.vocab.get(t, None) for t in p_arr]
+            if None in set(p_ints):
                 continue
 
-            b_idx = '{}:{}'.format(p_len, p_arr[0])
-            e_idx = '{}:{}'.format(p_len, p_arr[-1])
-            self.b.add(b_idx)
-            self.e.add(e_idx)
+            p_obj = (p_len, p_ints[0], p_ints[-1], self.hash(p_ints))
 
-            p_hash = self.hash(p_arr)
-            self.tables[p_len][p_hash] = b'1'
+            self.patterns.p_obj.add(p_obj)
+            self.patterns.p_len.add(p_len)
 
-            self.lengths.add(p_len)
-            n_patterns += 1
-
-            if n_patterns % 100000 == 0:
-                logging.info('Storing patterns: {}'.format(n_patterns))
-                for j in self.lengths:
-                    self.tables[j].commit()
-
-        logging.info('Storing patterns: {}'.format(n_patterns))
-        for j in self.lengths:
-            self.tables[j].commit()
-            self.tables[j].close()
-
-        for i in range(1, max_len + 1):
-            if i not in self.lengths:
-                os.remove('{}/tables.{}'.format(self.model_dir, i))
-
-        with open('{}/model'.format(self.model_dir), 'wb') as fout:
-            pickle.dump((self.vocab, self.b, self.e, self.lengths), fout)
+        with open('{}/patterns.p'.format(self.model_dir), 'wb') as fout:
+            pickle.dump(self.patterns, fout, -1)
 
     def hash(self, arr):
-        s = b':'.join(['{}'.format(i) for i in arr])
-        return b'{}'.format(xxhash.xxh64(s).hexdigest())
-
-    def _hash_check(self, p_len, p_hash):
-        return p_hash in self.tables[p_len]
+        s = ' '.join('{}'.format(i) for i in arr)
+        return binascii.crc32(s) % (1 << 32)
 
     def match(self, sentence, remove_subset=False):
         tok = self.tokenizer(sentence.strip())
-        tok_arr = [self.vocab.get(t, None) for t in tok]
-        tok_len = len(tok_arr)
+        tok_ints = [self.vocab.get(t, None) for t in tok]
+        tok_len = len(tok_ints)
         candidates = set()
 
-        for i, b_tok in enumerate(tok_arr):
-            if b_tok == None:
+        for i, b_int in enumerate(tok_ints):
+            if b_int == None:
                 continue
 
-            for p_len in self.lengths:
+            for p_len in self.patterns.p_len:
                 j = i + p_len
                 if j + 1 > tok_len:
                     continue
 
-                if not '{}:{}'.format(p_len, b_tok) in self.b:
+                p_ints = tok_ints[i:j]
+                if None in set(p_ints):
                     continue
 
-                e_tok = tok_arr[j - 1]
-                if e_tok == None:
+                e_int = tok_ints[j - 1]
+                if e_int == None:
                     continue
 
-                if not '{}:{}'.format(p_len, e_tok) in self.e:
-                    continue
+                p_hash = self.hash(tok_ints[i:j])
+                p_obj = (p_len, b_int, e_int, p_hash)
 
-                p_arr = tok_arr[i:j]
-                if None in set(p_arr):
-                    continue
-
-                p_hash = self.hash(p_arr)
-                if self._hash_check(p_len, p_hash):
+                if p_obj in self.patterns.p_obj:
                     candidates.add((i, j))
 
         if remove_subset:
