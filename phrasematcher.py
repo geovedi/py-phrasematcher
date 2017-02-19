@@ -108,7 +108,7 @@ class PhraseMatcher(object):
                 continue
 
             p_c = self.crc32(' '.join(p_arr))
-            p_f = self.fletcher((p_len, p_ints[0], p_ints[-1], p_c))
+            p_f = self.fletcher(p_ints)
 
             self.patterns.lengths.add(p_len)
             self.patterns.b_ints.add(p_ints[0])
@@ -153,7 +153,7 @@ class PhraseMatcher(object):
                     continue
 
                 p_c = self.crc32(' '.join(tok[i:j + 1]))
-                p_f = self.fletcher((p_len, b_int, e_int, p_c))
+                p_f = self.fletcher(p_ints)
                 if (p_c, p_f) in self.patterns.checksums:
                     candidates.add((i, j))
 
