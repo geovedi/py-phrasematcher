@@ -29,7 +29,7 @@ kesalahan defensif terbesar
 ```python
 from phrasematcher import PhraseMatcher
 
-matcher = PhraseMatcher('pmdb', pattern_file='patterns.txt')
+matcher = PhraseMatcher('model_dirname', pattern_file='patterns.txt')
 
 text = '''menurut analisa squawka , mu adalah satu di antara lima kesebelasan
           dengan kesalahan defensif terbesar di epl musim lalu -- walau hanya
@@ -42,7 +42,7 @@ for match in matcher.match(text):
 ### Reusing database
 
 ```python
-matcher = PhraseMatcher('pmdb')
+matcher = PhraseMatcher('model_dirname')
 ```
 
 ## Why?
