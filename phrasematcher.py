@@ -9,6 +9,7 @@ import binascii
 import pickle
 
 from collections import defaultdict
+from sortedcontainers import SortedSet
 
 import logging
 logging.basicConfig(
@@ -18,11 +19,13 @@ logging.basicConfig(
 
 
 class Patterns(object):
-    __slots__ = ('p_len', 'p_obj')
+    __slots__ = ('lengths', 'b_ints', 'e_ints', 'checksums')
 
     def __init__(self):
-        self.p_len = set()
-        self.p_obj = set()
+        self.lengths = SortedSet()
+        self.b_ints = SortedSet()
+        self.e_ints = SortedSet()
+        self.checksums = SortedSet()
 
 
 class PhraseMatcher(object):
@@ -104,18 +107,27 @@ class PhraseMatcher(object):
             if None in set(p_ints):
                 continue
 
-            p_hash = self.hash(' '.join(p_arr))
-            p_obj = (p_len, p_ints[0], p_ints[-1], p_hash)
+            p_c = self.crc32(' '.join(p_arr))
+            p_f = self.fletcher((p_len, p_ints[0], p_ints[-1], p_c))
 
-            self.patterns.p_obj.add(p_obj)
-            self.patterns.p_len.add(p_len)
+            self.patterns.lengths.add(p_len)
+            self.patterns.b_ints.add(p_ints[0])
+            self.patterns.e_ints.add(p_ints[-1])
+            self.patterns.checksums.add((p_c, p_f))
 
         with open('{}/patterns.p'.format(self.model_dir), 'wb') as fout:
             pickle.dump(self.patterns, fout, -1)
 
-    def hash(self, text):
+    def crc32(self, text):
         s = text.encode('utf-8')
         return binascii.crc32(s) % (1 << 32)
+
+    def fletcher(self, arr):
+        sum1 = sum2 = 0
+        for v in arr:
+            sum1 = (sum1 + v) % 255
+            sum2 = (sum1 + sum1) % 255
+        return (sum1 * 256) + sum2
 
     def match(self, sentence, remove_subset=False):
         tok = self.tokenizer(sentence.strip())
@@ -124,10 +136,10 @@ class PhraseMatcher(object):
         candidates = set()
 
         for i, b_int in enumerate(tok_ints):
-            if b_int == None:
+            if b_int not in self.patterns.b_ints:
                 continue
 
-            for p_len in self.patterns.p_len:
+            for p_len in self.patterns.lengths:
                 j = i + p_len - 1
                 if j + 1 > tok_len:
                     continue
@@ -137,13 +149,12 @@ class PhraseMatcher(object):
                     continue
 
                 e_int = tok_ints[j]
-                if e_int == None:
+                if e_int not in self.patterns.e_ints:
                     continue
 
-                p_hash = self.hash(' '.join(tok[i:j + 1]))
-                p_obj = (p_len, b_int, e_int, p_hash)
-
-                if p_obj in self.patterns.p_obj:
+                p_c = self.crc32(' '.join(tok[i:j + 1]))
+                p_f = self.fletcher((p_len, b_int, e_int, p_c))
+                if (p_c, p_f) in self.patterns.checksums:
                     candidates.add((i, j))
 
         if remove_subset:
