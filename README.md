@@ -2,6 +2,10 @@
 
 Fast and resource-friendly Python phrase matcher.
 
+## Requirements
+
+- sortedcontainers
+
 
 ## Usage
 
